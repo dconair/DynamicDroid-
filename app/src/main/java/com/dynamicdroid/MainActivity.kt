@@ -197,12 +197,7 @@ private fun HomeScreen(app: DynamicDroidApp) {
             }
             if (status.liveUpdatesSupported) {
                 PermissionRow(stringResource(R.string.perm_live_updates), status.liveUpdates) {
-                    context.startActivity(
-                        // Settings.ACTION_MANAGE_APP_PROMOTED_NOTIFICATIONS steht nur in der Doku, nicht im SDK 36.1 –
-                        // der Live-Updates-Schalter liegt auf der App-Benachrichtigungsseite.
-                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
-                    )
+                    openLiveUpdateSettings(context)
                 }
             } else {
                 Text(stringResource(R.string.live_updates_unsupported), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -250,6 +245,23 @@ private fun HomeScreen(app: DynamicDroidApp) {
 }
 
 /**
+ * Öffnet die Live-Updates-Einstellung der App. `Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS` ist erst im
+ * SDK 37 als Konstante verfügbar (Wert unten per android.jar von API 37 geprüft); auf Geräten ohne diese Seite
+ * fällt die Funktion auf die allgemeinen App-Benachrichtigungseinstellungen zurück.
+ */
+private fun openLiveUpdateSettings(context: android.content.Context) {
+    val promotion = Intent("android.settings.APP_NOTIFICATION_PROMOTION_SETTINGS")
+        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+    val general = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+    try {
+        context.startActivity(promotion)
+    } catch (_: android.content.ActivityNotFoundException) {
+        context.startActivity(general)
+    }
+}
+
+/**
  * Rohdaten für die Fehlersuche (z. B. Now Bar / Live Updates): API-Level, Erlaubnis und – bei laufender Navigation –
  * ob die gepostete Benachrichtigung von Android als promoted eingestuft wurde.
  */
@@ -273,7 +285,20 @@ private fun readDiagnostics(context: android.content.Context): String {
             sb.append("  als promoted eingestuft: ${(posted.flags and android.app.Notification.FLAG_PROMOTED_ONGOING) != 0}")
         }
     }
+    sb.appendLine()
+    sb.append("Befund: " + verdict(caps, posted))
     return sb.toString().trimEnd()
+}
+
+private fun verdict(caps: LiveUpdateCapabilities, posted: android.app.Notification?): String = when {
+    !caps.supportsProgressStyle -> "Android unter 16: nur klassische Benachrichtigung, keine Live Updates."
+    !caps.canPostPromoted() -> "Live Updates sind für die App in Android AUSGESCHALTET. Oben bei \"Live-Updates\" einschalten."
+    posted == null -> "Navigation starten, dann steht hier, ob Android die Benachrichtigung promotet."
+    (posted.flags and android.app.Notification.FLAG_PROMOTED_ONGOING) != 0 ->
+        "Android hat die Benachrichtigung als Live Update eingestuft. Ob die Now Bar sie zeigt, entscheidet Samsung " +
+            "(Einstellungen > Benachrichtigungen > Live-Benachrichtigungen bzw. Now Bar prüfen)."
+    posted.hasPromotableCharacteristics() -> "Erlaubt und formal geeignet, aber Android promotet sie nicht: Der Promotion-Wunsch kommt nicht an."
+    else -> "Die Benachrichtigung erfüllt die Live-Update-Kriterien nicht."
 }
 
 @Composable
