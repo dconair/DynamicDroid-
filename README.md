@@ -71,6 +71,22 @@ Gegen die `android.jar` von API 36 und 36.1 geprüft (`javap`), nicht geraten:
 - Voraussetzungen laut Doku, die der Code erfüllt: `ProgressStyle`, ongoing, Titel gesetzt, kein `RemoteViews`,
   nicht colorized, Channel nicht `IMPORTANCE_MIN`.
 
+## Samsung Now Bar (One UI 8)
+
+Ab One UI 8 (Android 16) zeigt Samsung die Android-16-**Live Updates** in der Now Bar, auf dem Always-on-Display,
+dem Sperrbildschirm und als Chip in der Statusleiste. Es gibt dafür **kein öffentliches Samsung-SDK**; die Anbindung
+läuft über dieselbe Standard-API (`ProgressStyle`, promoted ongoing), die diese App bereits nutzt. Inoffizielle
+Samsung-Extras (reverse-engineert, auf Whitelist-Apps beschränkt) werden bewusst **nicht** verwendet.
+
+Voraussetzungen, damit die Now Bar die Benachrichtigung aufnimmt: One UI 8, Live Updates für die App erlaubt
+(Benachrichtigungseinstellungen der App) und ggf. der Samsung-Schalter für Live-Benachrichtigungen. Die
+Diagnose-Karte in der App zeigt bei laufender Navigation, ob Android die Benachrichtigung als *promoted* einstuft.
+One UI 8 basiert auf Android 16 (API 36.0): dort wird der Promotion-Wunsch über den Extra-Schlüssel gesetzt; ob Samsungs
+Build ihn auswertet, ist ungeprüft.
+
+Quellen: [Android Authority](https://www.androidauthority.com/one-ui-8-live-updates-support-3573794/),
+[Android Police](https://www.androidpolice.com/one-ui-8-now-bar-live-updates-integrations-confirmed/).
+
 ## Berechtigungen und Degradierung
 
 | Berechtigung | Zweck | Fehlt sie … |
@@ -93,7 +109,9 @@ Schalter in der App („Dynamic-Island-Pille"), standardmäßig **aus**.
 (`ACTION_MANAGE_OVERLAY_PERMISSION`) → Nutzer erlaubt → Rückkehr in die App (Status wird bei `ON_RESUME` neu gelesen).
 Ohne Erlaubnis startet die Navigation trotzdem, nur ohne Pille.
 
-**Verhalten:** Position und Breite stammen aus `DisplayCutout` (Geräte ohne Cutout: mittig unter der Statusleiste).
+**Verhalten:** Standardmäßig hängt die Pille mittig **unter** der Statusleiste und überdeckt so keine Systemicons und nicht den
+Live-Update-Chip. Optional (Schalter) sitzt sie um den Kamera-Cutout (`DisplayCutout`), liegt dann aber über der Statusleiste.
+Schrift in der Pille ist vom Systemschriftgrad entkoppelt, damit feste Geometrie nie überlappt.
 Die Pille zeigt links das Abbiege-Icon, rechts den Chip-Text und klappt bei jeder neuen Abbiegung 4 s lang per
 Spring-Animation zu einer Karte auf. Kurzer Tap öffnet die App, langer Tap zeigt „App öffnen" / „Navigation beenden".
 
