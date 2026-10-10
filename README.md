@@ -10,9 +10,19 @@ Dynamic-Island-Pille um den Kamera-Cutout.
 
 ## Was ist drin
 
-Das Repo war vorher leer (nur README/LICENSE). Es gibt **keine Routing-Engine**: Routen kommen aus einer
-synthetischen Demo-Route (`DemoRoute`) und werden entweder simuliert (`MockRouteSimulator`) oder per GPS verfolgt
-(`LocationRouteTracker`). Eine echte Routenberechnung kann später über `ActiveRoute` angebunden werden.
+- **Ziel suchen, Route berechnen, navigieren:** Adresssuche über Nominatim, Routing über OSRM, beides ohne API-Schlüssel
+  und mit Daten von © OpenStreetMap-Mitwirkenden. Die Route startet am aktuellen Standort. Sie lässt sich mit echtem GPS
+  fahren (mit **automatischem Neuberechnen** nach Abweichung: 3 Fixes in Folge > 50 m neben der Route, höchstens alle
+  15 s) oder zum Testen **simulieren**.
+- **Routenansicht:** schematisch mit Linie, Start, Ziel und aktueller Position, **ohne Kartenkacheln**. Eine echte
+  Karte (Google Maps SDK, MapLibre, osmdroid) ist noch nicht eingebaut.
+- **Demo-Route** (`DemoRoute`) und `MockRouteSimulator` bleiben für Tests ohne Netz und ohne Bewegung.
+- `RouteProvider` und `Geocoder` sind Schnittstellen: Google Routes/Places o. ä. lassen sich einhängen, brauchen aber
+  einen API-Schlüssel mit Abrechnung, den ich nicht habe.
+
+**Wichtig:** Der Standard-Server `router.project-osrm.org` ist ein **Demo-Server** ohne Verfügbarkeitszusage und nicht
+für Dauerbetrieb gedacht. Nominatim erlaubt höchstens 1 Anfrage pro Sekunde und keine Autovervollständigung (die App
+sucht deshalb nur auf Tastendruck). Für eine Veröffentlichung: eigene OSRM/Valhalla-Instanz oder kommerzieller Anbieter.
 
 ## Architektur
 
@@ -35,7 +45,9 @@ synthetischen Demo-Route (`DemoRoute`) und werden entweder simuliert (`MockRoute
 |---|---|
 | `model` | `ActiveRoute`, `ManeuverStep`, `RouteProgress`, `ManeuverType`, `LatLng` |
 | `state` | `NavigationState` (StateFlow, Idle/Active) |
-| `routing` | `RouteProgressCalculator`, `RouteGeometry` (Snapping), `DemoRoute`, `MockRouteSimulator`, `LocationRouteTracker` |
+| `routing` | `RouteProgressCalculator`, `RouteGeometry` (Snapping), `RerouteDecider`, `DemoRoute`, `MockRouteSimulator`, `LocationRouteTracker`, `CurrentLocation` |
+| `routing.online` | `OsrmRouteProvider`/`OsrmParser`, `NominatimGeocoder`, `Polyline` |
+| `ui` | `RoutePlanner` (Suche + Route), `RouteMap` (schematische Karte) |
 | `liveupdate` | `LiveUpdateContentMapper` (rein, testbar), `Formatters`, `LiveUpdatePresenter`, `LiveUpdateCapabilities` |
 | `update` | `UpdateThrottler` (rein, testbar) |
 | `service` | `NavigationService` (Foreground Service, Typ `location`) |
@@ -74,7 +86,7 @@ Gegen die `android.jar` von API 36 und 36.1 geprüft (`javap`), nicht geraten:
 ## Samsung Now Bar (One UI 8)
 
 Ab One UI 8 (Android 16) zeigt Samsung die Android-16-**Live Updates** in der Now Bar, auf dem Always-on-Display,
-dem Sperrbildschirm und als Chip in der Statusleiste. Es gibt dafür **kein öffentliches Samsung-SDK**; die Anbindung
+dem Sperrbildschirm und als Chip in der Statusleiste. Es gibt dafür **kein öffentliches Samsung-"Now Bar SDK"** (und keine Android-Komponente namens "Webkit" dafür); die Anbindung
 läuft über dieselbe Standard-API (`ProgressStyle`, promoted ongoing), die diese App bereits nutzt. Inoffizielle
 Samsung-Extras (reverse-engineert, auf Whitelist-Apps beschränkt) werden bewusst **nicht** verwendet.
 
@@ -170,7 +182,8 @@ starten und zur Home-Ansicht oder in eine andere App wechseln.
 
 ## Bekannte Einschränkungen
 
-- Keine Routenberechnung, kein Re-Routing, keine Kartenansicht: Off-Route wird nur angezeigt.
+- Routing über den OSRM-Demo-Server (siehe oben), nur Auto-Profil, keine Alternativrouten, keine Verkehrsdaten, keine
+  Kartenkacheln. Spurempfehlungen und Geschwindigkeitslimits fehlen.
 - Keine Sprachausgabe. Die optionale „Stumm"-Aktion wurde deshalb weggelassen statt als leere Funktion eingebaut.
 - Distanzen/Zeiten nur metrisch; die Einheit „Min"/„h" ist nicht lokalisiert.
 - Das Abbiege-Icon für Kreisverkehr/Wenden ist eine einfache Vektorgrafik, kein ausdifferenziertes Set.

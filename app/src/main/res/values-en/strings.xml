@@ -40,4 +40,13 @@
     <string name="start_without_notifications">Without notification permission navigation runs, but the Live Update stays invisible.</string>
     <string name="start_mock">Start mock route (simulation)</string>
     <string name="start_gps">GPS test: demo route from current location</string>
+    <string name="planner_title">Destination and route</string>
+    <string name="planner_destination">Destination (address or place)</string>
+    <string name="planner_search">Search destination</string>
+    <string name="planner_no_results">Nothing found.</string>
+    <string name="planner_no_location">Current location unavailable. Turn on GPS and try again outdoors.</string>
+    <string name="planner_start_gps">Start navigation</string>
+    <string name="planner_simulate">Simulate drive</string>
+    <string name="planner_attribution">Search: Nominatim, routing: OSRM demo server, data © OpenStreetMap contributors</string>
+    <string name="street_unnamed">the road</string>
 </resources>

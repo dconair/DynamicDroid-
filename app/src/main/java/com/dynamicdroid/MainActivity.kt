@@ -105,7 +105,7 @@ private data class PermissionStatus(
     val batteryUnrestricted: Boolean,
 )
 
-private val CardShape = RoundedCornerShape(28.dp)
+internal val CardShape = RoundedCornerShape(28.dp)
 private val SoftSpring = spring<androidx.compose.ui.unit.IntSize>(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
 
 @Composable
@@ -127,7 +127,11 @@ private fun HomeScreen(app: DynamicDroidApp) {
     // Zuletzt aktiver Inhalt bleibt während der Ausblend-Animation stehen, statt sofort zu verschwinden.
     val active = navState as? NavigationUiState.Active
     var lastContent by remember { mutableStateOf<com.dynamicdroid.liveupdate.LiveUpdateContent?>(null) }
-    if (active != null) lastContent = app.contentMapper.map(active)
+    var lastRoute by remember { mutableStateOf<com.dynamicdroid.model.ActiveRoute?>(null) }
+    if (active != null) {
+        lastContent = app.contentMapper.map(active)
+        lastRoute = active.route
+    }
     val running = active != null
 
     Column(
@@ -141,7 +145,7 @@ private fun HomeScreen(app: DynamicDroidApp) {
             enter = fadeIn(tween(300)) + expandVertically(SoftSpring),
             exit = fadeOut(tween(200)) + shrinkVertically(SoftSpring),
         ) {
-            lastContent?.let { ActiveRouteCard(it) }
+            lastContent?.let { ActiveRouteCard(it, lastRoute) }
         }
         AnimatedVisibility(
             visible = !running,
@@ -151,7 +155,10 @@ private fun HomeScreen(app: DynamicDroidApp) {
             Text(stringResource(R.string.home_idle), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
-        // --- Steuerung -----------------------------------------------------------------------------------
+        // --- Ziel suchen, Route berechnen, navigieren ----------------------------------------------------
+        com.dynamicdroid.ui.RoutePlanner(app, context, status.location, speed, running)
+
+        // --- Demo / Simulation ----------------------------------------------------------------------------
         SectionCard {
             Text(stringResource(R.string.speed_label), style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -302,7 +309,7 @@ private fun verdict(caps: LiveUpdateCapabilities, posted: android.app.Notificati
 }
 
 @Composable
-private fun SectionCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+internal fun SectionCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     Card(
         Modifier.fillMaxWidth().animateContentSize(SoftSpring),
         shape = CardShape,
@@ -313,7 +320,7 @@ private fun SectionCard(content: @Composable androidx.compose.foundation.layout.
 }
 
 @Composable
-private fun ActiveRouteCard(content: com.dynamicdroid.liveupdate.LiveUpdateContent) {
+private fun ActiveRouteCard(content: com.dynamicdroid.liveupdate.LiveUpdateContent, route: com.dynamicdroid.model.ActiveRoute?) {
     val progress by animateFloatAsState(
         (content.progressMeters.toFloat() / content.progressMaxMeters).coerceIn(0f, 1f),
         tween(1_000, easing = LinearEasing),
@@ -331,6 +338,7 @@ private fun ActiveRouteCard(content: com.dynamicdroid.liveupdate.LiveUpdateConte
                 progress = { progress },
                 modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
             )
+            if (route != null) com.dynamicdroid.ui.RouteMap(route, traveledMeters = content.progressMeters)
         }
     }
 }
