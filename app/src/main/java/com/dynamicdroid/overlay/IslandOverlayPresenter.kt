@@ -2,6 +2,8 @@ package com.dynamicdroid.overlay
 
 import android.content.Context
 import android.graphics.PixelFormat
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.WindowInsets
 import android.view.WindowMetrics
@@ -28,36 +30,48 @@ class IslandOverlayPresenter(
 ) : OverlayPresenter {
 
     private val windowManager = context.getSystemService(WindowManager::class.java)
+    private val density = context.resources.displayMetrics.density
     private val contentState = mutableStateOf<LiveUpdateContent?>(null)
+    private val shownState = mutableStateOf(false)
+    private val appForegroundState = mutableStateOf(false)
     private val lifecycleOwner = OverlayLifecycleOwner()
+    private val handler = Handler(Looper.getMainLooper())
     private var view: ComposeView? = null
+    private var params: WindowManager.LayoutParams? = null
+    private var cutout = CutoutGeometry(0f, 0f, 0, 0)
 
+    // Die Pille blendet per Spring aus, wenn die eigene App sichtbar wird, und wieder ein, wenn sie verschwindet.
     private val appVisibilityObserver = object : DefaultLifecycleObserver {
-        override fun onStart(owner: LifecycleOwner) { view?.visibility = android.view.View.GONE }
-        override fun onStop(owner: LifecycleOwner) { view?.visibility = android.view.View.VISIBLE }
+        override fun onStart(owner: LifecycleOwner) { appForegroundState.value = true }
+        override fun onStop(owner: LifecycleOwner) { appForegroundState.value = false }
     }
 
     override fun show() {
         if (view != null) return
-        val cutout = CutoutGeometry.read(windowManager.currentWindowMetrics, context.resources.displayMetrics.density)
+        cutout = CutoutGeometry.read(windowManager.currentWindowMetrics, density)
         val composeView = ComposeView(context).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 IslandPill(
                     content = contentState.value,
+                    visible = shownState.value && !appForegroundState.value,
                     cutoutWidthDp = cutout.widthDp,
                     cutoutHeightDp = cutout.heightDp,
                     onOpenApp = onOpenApp,
                     onStop = onStop,
+                    onWindowExpanded = ::resizeWindow,
                 )
             }
         }
         lifecycleOwner.attachTo(composeView)
         lifecycleOwner.start()
 
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+        // Festes Fenster (kein WRAP_CONTENT): die Animation läuft komplett in Compose, das Fenster wird nur
+        // vor dem Aufklappen vergrößert und nach dem Zuklappen verkleinert – so gibt es keine Layout-Ruckler und
+        // das Overlay fängt im eingeklappten Zustand kaum Touches ab.
+        val lp = WindowManager.LayoutParams(
+            (IslandDimens.windowWidth(false, cutout.widthDp) * density).toInt(),
+            (IslandDimens.windowHeight(false, cutout.heightDp) * density).toInt(),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -71,25 +85,40 @@ class IslandOverlayPresenter(
             layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
             title = "DynamicDroid Island"
         }
-        windowManager.addView(composeView, params)
+        windowManager.addView(composeView, lp)
         view = composeView
+        params = lp
 
-        val process = ProcessLifecycleOwner.get().lifecycle
-        process.addObserver(appVisibilityObserver)
-        if (process.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
-            composeView.visibility = android.view.View.GONE
-        }
+        ProcessLifecycleOwner.get().lifecycle.addObserver(appVisibilityObserver)
+        shownState.value = true
+    }
+
+    private fun resizeWindow(expanded: Boolean) {
+        val v = view ?: return
+        val lp = params ?: return
+        lp.width = (IslandDimens.windowWidth(expanded, cutout.widthDp) * density).toInt()
+        lp.height = (IslandDimens.windowHeight(expanded, cutout.heightDp) * density).toInt()
+        runCatching { windowManager.updateViewLayout(v, lp) }
     }
 
     override fun render(content: LiveUpdateContent) {
         contentState.value = content
     }
 
+    /** Blendet per Spring aus und entfernt das Fenster erst danach, damit die Pille nicht abrupt verschwindet. */
     override fun hide() {
+        val v = view ?: return
         ProcessLifecycleOwner.get().lifecycle.removeObserver(appVisibilityObserver)
-        view?.let { runCatching { windowManager.removeViewImmediate(it) } }
+        shownState.value = false
         view = null
-        lifecycleOwner.stop()
+        handler.postDelayed({
+            runCatching { windowManager.removeViewImmediate(v) }
+            lifecycleOwner.stop()
+        }, EXIT_ANIMATION_MS)
+    }
+
+    private companion object {
+        const val EXIT_ANIMATION_MS = 600L
     }
 }
 
