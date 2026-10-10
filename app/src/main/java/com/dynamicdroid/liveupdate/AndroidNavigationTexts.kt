@@ -19,7 +19,7 @@ class AndroidNavigationTexts(private val context: Context) : NavigationTexts {
             ManeuverType.ROUNDABOUT -> R.string.maneuver_roundabout
             ManeuverType.ARRIVE -> R.string.maneuver_arrive
         }
-        return context.getString(res, street)
+        return context.getString(res, street.ifBlank { context.getString(R.string.street_unnamed) })
     }
 
     override fun arrived(destination: String) = context.getString(R.string.arrived_title)

@@ -10,9 +10,19 @@ Dynamic-Island-Pille um den Kamera-Cutout.
 
 ## Was ist drin
 
-Das Repo war vorher leer (nur README/LICENSE). Es gibt **keine Routing-Engine**: Routen kommen aus einer
-synthetischen Demo-Route (`DemoRoute`) und werden entweder simuliert (`MockRouteSimulator`) oder per GPS verfolgt
-(`LocationRouteTracker`). Eine echte Routenberechnung kann später über `ActiveRoute` angebunden werden.
+- **Ziel suchen, Route berechnen, navigieren:** Adresssuche über Nominatim, Routing über OSRM, beides ohne API-Schlüssel
+  und mit Daten von © OpenStreetMap-Mitwirkenden. Die Route startet am aktuellen Standort. Sie lässt sich mit echtem GPS
+  fahren (mit **automatischem Neuberechnen** nach Abweichung: 3 Fixes in Folge > 50 m neben der Route, höchstens alle
+  15 s) oder zum Testen **simulieren**.
+- **Routenansicht:** schematisch mit Linie, Start, Ziel und aktueller Position, **ohne Kartenkacheln**. Eine echte
+  Karte (Google Maps SDK, MapLibre, osmdroid) ist noch nicht eingebaut.
+- **Demo-Route** (`DemoRoute`) und `MockRouteSimulator` bleiben für Tests ohne Netz und ohne Bewegung.
+- `RouteProvider` und `Geocoder` sind Schnittstellen: Google Routes/Places o. ä. lassen sich einhängen, brauchen aber
+  einen API-Schlüssel mit Abrechnung, den ich nicht habe.
+
+**Wichtig:** Der Standard-Server `router.project-osrm.org` ist ein **Demo-Server** ohne Verfügbarkeitszusage und nicht
+für Dauerbetrieb gedacht. Nominatim erlaubt höchstens 1 Anfrage pro Sekunde und keine Autovervollständigung (die App
+sucht deshalb nur auf Tastendruck). Für eine Veröffentlichung: eigene OSRM/Valhalla-Instanz oder kommerzieller Anbieter.
 
 ## Architektur
 
@@ -35,7 +45,9 @@ synthetischen Demo-Route (`DemoRoute`) und werden entweder simuliert (`MockRoute
 |---|---|
 | `model` | `ActiveRoute`, `ManeuverStep`, `RouteProgress`, `ManeuverType`, `LatLng` |
 | `state` | `NavigationState` (StateFlow, Idle/Active) |
-| `routing` | `RouteProgressCalculator`, `RouteGeometry` (Snapping), `DemoRoute`, `MockRouteSimulator`, `LocationRouteTracker` |
+| `routing` | `RouteProgressCalculator`, `RouteGeometry` (Snapping), `RerouteDecider`, `DemoRoute`, `MockRouteSimulator`, `LocationRouteTracker`, `CurrentLocation` |
+| `routing.online` | `OsrmRouteProvider`/`OsrmParser`, `NominatimGeocoder`, `Polyline` |
+| `ui` | `RoutePlanner` (Suche + Route), `RouteMap` (schematische Karte) |
 | `liveupdate` | `LiveUpdateContentMapper` (rein, testbar), `Formatters`, `LiveUpdatePresenter`, `LiveUpdateCapabilities` |
 | `update` | `UpdateThrottler` (rein, testbar) |
 | `service` | `NavigationService` (Foreground Service, Typ `location`) |
@@ -71,6 +83,22 @@ Gegen die `android.jar` von API 36 und 36.1 geprüft (`javap`), nicht geraten:
 - Voraussetzungen laut Doku, die der Code erfüllt: `ProgressStyle`, ongoing, Titel gesetzt, kein `RemoteViews`,
   nicht colorized, Channel nicht `IMPORTANCE_MIN`.
 
+## Samsung Now Bar (One UI 8)
+
+Ab One UI 8 (Android 16) zeigt Samsung die Android-16-**Live Updates** in der Now Bar, auf dem Always-on-Display,
+dem Sperrbildschirm und als Chip in der Statusleiste. Es gibt dafür **kein öffentliches Samsung-"Now Bar SDK"** (und keine Android-Komponente namens "Webkit" dafür); die Anbindung
+läuft über dieselbe Standard-API (`ProgressStyle`, promoted ongoing), die diese App bereits nutzt. Inoffizielle
+Samsung-Extras (reverse-engineert, auf Whitelist-Apps beschränkt) werden bewusst **nicht** verwendet.
+
+Voraussetzungen, damit die Now Bar die Benachrichtigung aufnimmt: One UI 8, Live Updates für die App erlaubt
+(Benachrichtigungseinstellungen der App) und ggf. der Samsung-Schalter für Live-Benachrichtigungen. Die
+Diagnose-Karte in der App zeigt bei laufender Navigation, ob Android die Benachrichtigung als *promoted* einstuft.
+One UI 8 basiert auf Android 16 (API 36.0): dort wird der Promotion-Wunsch über den Extra-Schlüssel gesetzt; ob Samsungs
+Build ihn auswertet, ist ungeprüft.
+
+Quellen: [Android Authority](https://www.androidauthority.com/one-ui-8-live-updates-support-3573794/),
+[Android Police](https://www.androidpolice.com/one-ui-8-now-bar-live-updates-integrations-confirmed/).
+
 ## Berechtigungen und Degradierung
 
 | Berechtigung | Zweck | Fehlt sie … |
@@ -93,7 +121,9 @@ Schalter in der App („Dynamic-Island-Pille"), standardmäßig **aus**.
 (`ACTION_MANAGE_OVERLAY_PERMISSION`) → Nutzer erlaubt → Rückkehr in die App (Status wird bei `ON_RESUME` neu gelesen).
 Ohne Erlaubnis startet die Navigation trotzdem, nur ohne Pille.
 
-**Verhalten:** Position und Breite stammen aus `DisplayCutout` (Geräte ohne Cutout: mittig unter der Statusleiste).
+**Verhalten:** Standardmäßig hängt die Pille mittig **unter** der Statusleiste und überdeckt so keine Systemicons und nicht den
+Live-Update-Chip. Optional (Schalter) sitzt sie um den Kamera-Cutout (`DisplayCutout`), liegt dann aber über der Statusleiste.
+Schrift in der Pille ist vom Systemschriftgrad entkoppelt, damit feste Geometrie nie überlappt.
 Die Pille zeigt links das Abbiege-Icon, rechts den Chip-Text und klappt bei jeder neuen Abbiegung 4 s lang per
 Spring-Animation zu einer Karte auf. Kurzer Tap öffnet die App, langer Tap zeigt „App öffnen" / „Navigation beenden".
 
@@ -152,7 +182,8 @@ starten und zur Home-Ansicht oder in eine andere App wechseln.
 
 ## Bekannte Einschränkungen
 
-- Keine Routenberechnung, kein Re-Routing, keine Kartenansicht: Off-Route wird nur angezeigt.
+- Routing über den OSRM-Demo-Server (siehe oben), nur Auto-Profil, keine Alternativrouten, keine Verkehrsdaten, keine
+  Kartenkacheln. Spurempfehlungen und Geschwindigkeitslimits fehlen.
 - Keine Sprachausgabe. Die optionale „Stumm"-Aktion wurde deshalb weggelassen statt als leere Funktion eingebaut.
 - Distanzen/Zeiten nur metrisch; die Einheit „Min"/„h" ist nicht lokalisiert.
 - Das Abbiege-Icon für Kreisverkehr/Wenden ist eine einfache Vektorgrafik, kein ausdifferenziertes Set.

@@ -105,7 +105,7 @@ private data class PermissionStatus(
     val batteryUnrestricted: Boolean,
 )
 
-private val CardShape = RoundedCornerShape(28.dp)
+internal val CardShape = RoundedCornerShape(28.dp)
 private val SoftSpring = spring<androidx.compose.ui.unit.IntSize>(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
 
 @Composable
@@ -119,6 +119,7 @@ private fun HomeScreen(app: DynamicDroidApp) {
     val status = remember(refresh) { readStatus(context) }
 
     var islandEnabled by remember { mutableStateOf(app.featureFlags.islandOverlayEnabled) }
+    var aroundCutout by remember { mutableStateOf(app.featureFlags.islandAroundCutout) }
     var speed by remember { mutableStateOf(5.0) }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh++ }
@@ -126,7 +127,11 @@ private fun HomeScreen(app: DynamicDroidApp) {
     // Zuletzt aktiver Inhalt bleibt während der Ausblend-Animation stehen, statt sofort zu verschwinden.
     val active = navState as? NavigationUiState.Active
     var lastContent by remember { mutableStateOf<com.dynamicdroid.liveupdate.LiveUpdateContent?>(null) }
-    if (active != null) lastContent = app.contentMapper.map(active)
+    var lastRoute by remember { mutableStateOf<com.dynamicdroid.model.ActiveRoute?>(null) }
+    if (active != null) {
+        lastContent = app.contentMapper.map(active)
+        lastRoute = active.route
+    }
     val running = active != null
 
     Column(
@@ -140,7 +145,7 @@ private fun HomeScreen(app: DynamicDroidApp) {
             enter = fadeIn(tween(300)) + expandVertically(SoftSpring),
             exit = fadeOut(tween(200)) + shrinkVertically(SoftSpring),
         ) {
-            lastContent?.let { ActiveRouteCard(it) }
+            lastContent?.let { ActiveRouteCard(it, lastRoute) }
         }
         AnimatedVisibility(
             visible = !running,
@@ -150,7 +155,10 @@ private fun HomeScreen(app: DynamicDroidApp) {
             Text(stringResource(R.string.home_idle), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
-        // --- Steuerung -----------------------------------------------------------------------------------
+        // --- Ziel suchen, Route berechnen, navigieren ----------------------------------------------------
+        com.dynamicdroid.ui.RoutePlanner(app, context, status.location, speed, running)
+
+        // --- Demo / Simulation ----------------------------------------------------------------------------
         SectionCard {
             Text(stringResource(R.string.speed_label), style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -196,12 +204,7 @@ private fun HomeScreen(app: DynamicDroidApp) {
             }
             if (status.liveUpdatesSupported) {
                 PermissionRow(stringResource(R.string.perm_live_updates), status.liveUpdates) {
-                    context.startActivity(
-                        // Settings.ACTION_MANAGE_APP_PROMOTED_NOTIFICATIONS steht nur in der Doku, nicht im SDK 36.1 –
-                        // der Live-Updates-Schalter liegt auf der App-Benachrichtigungsseite.
-                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
-                    )
+                    openLiveUpdateSettings(context)
                 }
             } else {
                 Text(stringResource(R.string.live_updates_unsupported), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -221,19 +224,92 @@ private fun HomeScreen(app: DynamicDroidApp) {
                 })
             }
             AnimatedVisibility(visible = islandEnabled) {
-                PermissionRow(stringResource(R.string.perm_overlay), status.overlay) {
-                    context.startActivity(
-                        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")),
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    PermissionRow(stringResource(R.string.perm_overlay), status.overlay) {
+                        context.startActivity(
+                            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")),
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(stringResource(R.string.flag_island_around_cutout), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Switch(checked = aroundCutout, onCheckedChange = {
+                            aroundCutout = it
+                            app.featureFlags.islandAroundCutout = it
+                        })
+                    }
                 }
             }
+        }
+
+        // --- Diagnose: zeigt, ob Android das Live Update tatsächlich als "promoted" einstuft -------------
+        val diagnostics = remember(refresh, navState) { readDiagnostics(context) }
+        SectionCard {
+            Text("Diagnose", style = MaterialTheme.typography.titleSmall)
+            Text(diagnostics, style = MaterialTheme.typography.bodySmall, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
         }
         Spacer(Modifier.height(8.dp))
     }
 }
 
+/**
+ * Öffnet die Live-Updates-Einstellung der App. `Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS` ist erst im
+ * SDK 37 als Konstante verfügbar (Wert unten per android.jar von API 37 geprüft); auf Geräten ohne diese Seite
+ * fällt die Funktion auf die allgemeinen App-Benachrichtigungseinstellungen zurück.
+ */
+private fun openLiveUpdateSettings(context: android.content.Context) {
+    val promotion = Intent("android.settings.APP_NOTIFICATION_PROMOTION_SETTINGS")
+        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+    val general = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+    try {
+        context.startActivity(promotion)
+    } catch (_: android.content.ActivityNotFoundException) {
+        context.startActivity(general)
+    }
+}
+
+/**
+ * Rohdaten für die Fehlersuche (z. B. Now Bar / Live Updates): API-Level, Erlaubnis und – bei laufender Navigation –
+ * ob die gepostete Benachrichtigung von Android als promoted eingestuft wurde.
+ */
+private fun readDiagnostics(context: android.content.Context): String {
+    val nm = context.getSystemService(NotificationManager::class.java)
+    val caps = LiveUpdateCapabilities(context)
+    val sb = StringBuilder()
+    sb.appendLine("Gerät: ${Build.MANUFACTURER} ${Build.MODEL}")
+    sb.appendLine("Android ${Build.VERSION.RELEASE}, SDK_INT ${Build.VERSION.SDK_INT}" +
+        if (Build.VERSION.SDK_INT >= 36) ", SDK_INT_FULL ${Build.VERSION.SDK_INT_FULL}" else "")
+    sb.appendLine("ProgressStyle verfügbar: ${caps.supportsProgressStyle}")
+    sb.appendLine("setRequestPromotedOngoing öffentlich: ${caps.hasRequestPromotedOngoingApi}")
+    if (caps.supportsProgressStyle) sb.appendLine("Live Updates erlaubt: ${caps.canPostPromoted()}")
+    val posted = nm.activeNotifications.firstOrNull { it.id == com.dynamicdroid.liveupdate.LiveUpdatePresenter.NOTIFICATION_ID }?.notification
+    if (posted == null) {
+        sb.append("Aktive Benachrichtigung: keine")
+    } else {
+        sb.appendLine("Aktive Benachrichtigung: ja")
+        if (Build.VERSION.SDK_INT >= 36) {
+            sb.appendLine("  promotable: ${posted.hasPromotableCharacteristics()}")
+            sb.append("  als promoted eingestuft: ${(posted.flags and android.app.Notification.FLAG_PROMOTED_ONGOING) != 0}")
+        }
+    }
+    sb.appendLine()
+    sb.append("Befund: " + verdict(caps, posted))
+    return sb.toString().trimEnd()
+}
+
+private fun verdict(caps: LiveUpdateCapabilities, posted: android.app.Notification?): String = when {
+    !caps.supportsProgressStyle -> "Android unter 16: nur klassische Benachrichtigung, keine Live Updates."
+    !caps.canPostPromoted() -> "Live Updates sind für die App in Android AUSGESCHALTET. Oben bei \"Live-Updates\" einschalten."
+    posted == null -> "Navigation starten, dann steht hier, ob Android die Benachrichtigung promotet."
+    (posted.flags and android.app.Notification.FLAG_PROMOTED_ONGOING) != 0 ->
+        "Android hat die Benachrichtigung als Live Update eingestuft. Ob die Now Bar sie zeigt, entscheidet Samsung " +
+            "(Einstellungen > Benachrichtigungen > Live-Benachrichtigungen bzw. Now Bar prüfen)."
+    posted.hasPromotableCharacteristics() -> "Erlaubt und formal geeignet, aber Android promotet sie nicht: Der Promotion-Wunsch kommt nicht an."
+    else -> "Die Benachrichtigung erfüllt die Live-Update-Kriterien nicht."
+}
+
 @Composable
-private fun SectionCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+internal fun SectionCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     Card(
         Modifier.fillMaxWidth().animateContentSize(SoftSpring),
         shape = CardShape,
@@ -244,7 +320,7 @@ private fun SectionCard(content: @Composable androidx.compose.foundation.layout.
 }
 
 @Composable
-private fun ActiveRouteCard(content: com.dynamicdroid.liveupdate.LiveUpdateContent) {
+private fun ActiveRouteCard(content: com.dynamicdroid.liveupdate.LiveUpdateContent, route: com.dynamicdroid.model.ActiveRoute?) {
     val progress by animateFloatAsState(
         (content.progressMeters.toFloat() / content.progressMaxMeters).coerceIn(0f, 1f),
         tween(1_000, easing = LinearEasing),
@@ -262,6 +338,7 @@ private fun ActiveRouteCard(content: com.dynamicdroid.liveupdate.LiveUpdateConte
                 progress = { progress },
                 modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
             )
+            if (route != null) com.dynamicdroid.ui.RouteMap(route, traveledMeters = content.progressMeters)
         }
     }
 }

@@ -18,6 +18,7 @@ import com.dynamicdroid.routing.DemoRoute
 import com.dynamicdroid.routing.LocationRouteTracker
 import com.dynamicdroid.routing.MockRouteSimulator
 import com.dynamicdroid.routing.RouteProgressCalculator
+import com.dynamicdroid.routing.online.OsrmRouteProvider
 import com.dynamicdroid.state.NavigationUiState
 import com.dynamicdroid.update.UpdateThrottler
 import kotlinx.coroutines.CoroutineScope
@@ -68,14 +69,19 @@ class NavigationService : Service() {
 
     private fun startNavigation(intent: Intent) {
         if (running) return
-        val useGps = intent.getStringExtra(EXTRA_SOURCE) == SOURCE_GPS
+        val source = intent.getStringExtra(EXTRA_SOURCE) ?: SOURCE_MOCK
         val speed = intent.getDoubleExtra(EXTRA_SPEED_MULTIPLIER, 1.0)
         val state = app.navigationState
 
-        // Mock: erst Zustand setzen, damit schon die erste Benachrichtigung echten Inhalt hat.
-        val demoRoute = DemoRoute.create()
-        if (!useGps) {
-            state.start(demoRoute, RouteProgressCalculator.fromTraveled(demoRoute, 0.0, System.currentTimeMillis()))
+        // Route zuerst in den State, damit schon die erste Benachrichtigung echten Inhalt hat.
+        // SOURCE_GPS (Demo ab Standort) bekommt seine Route erst mit dem ersten Fix.
+        val initialRoute: ActiveRoute? = when (source) {
+            SOURCE_MOCK -> DemoRoute.create()
+            SOURCE_ROUTE_SIM, SOURCE_ROUTE_GPS -> app.plannedRoute.value
+            else -> null
+        }
+        if (initialRoute != null) {
+            state.start(initialRoute, RouteProgressCalculator.fromTraveled(initialRoute, 0.0, System.currentTimeMillis()))
         }
         val first = (state.state.value as? NavigationUiState.Active)?.let { app.contentMapper.map(it) }
         val notification = if (first != null) presenter.build(first) else presenter.buildStarting()
@@ -98,18 +104,33 @@ class NavigationService : Service() {
         first?.let { throttler.markPosted(it, System.currentTimeMillis()) }
 
         if (app.featureFlags.islandOverlayEnabled && Settings.canDrawOverlays(this)) {
-            overlay = IslandOverlayPresenter(this, onOpenApp = ::openApp, onStop = ::stopNavigation).also { it.show() }
+            overlay = IslandOverlayPresenter(
+                this, onOpenApp = ::openApp, onStop = ::stopNavigation,
+                aroundCutout = app.featureFlags.islandAroundCutout,
+            ).also { it.show() }
         }
 
         observeJob = scope.launch { observeState() }
         sourceJob = scope.launch {
-            if (useGps) {
-                LocationRouteTracker(this@NavigationService, state).trackFromFirstFix { origin -> DemoRoute.create(origin) }
-            } else {
-                MockRouteSimulator(state).run(demoRoute, speed)
-                // Ziel erreicht: Ankunftsanzeige kurz stehen lassen, dann beenden.
-                delay(ARRIVAL_LINGER_MS)
-                stopNavigation()
+            when (source) {
+                SOURCE_GPS -> LocationRouteTracker(this@NavigationService, state)
+                    .trackFromFirstFix { origin -> DemoRoute.create(origin) }
+                SOURCE_ROUTE_GPS -> {
+                    val route = initialRoute ?: return@launch stopNavigation()
+                    val provider = OsrmRouteProvider()
+                    LocationRouteTracker(this@NavigationService, state).track(route) { from ->
+                        provider.route(from, route.geometry.last(), route.destinationName)
+                    }
+                }
+                else -> {
+                    val route = initialRoute ?: return@launch stopNavigation()
+                    // Simulation: mit der durchschnittlichen Geschwindigkeit der Route fahren.
+                    val averageSpeed = route.totalDistanceMeters.toDouble() / route.totalDurationSeconds
+                    MockRouteSimulator(state, speedMps = averageSpeed).run(route, speed)
+                    // Ziel erreicht: Ankunftsanzeige kurz stehen lassen, dann beenden.
+                    delay(ARRIVAL_LINGER_MS)
+                    stopNavigation()
+                }
             }
         }
     }
@@ -183,6 +204,9 @@ class NavigationService : Service() {
         const val EXTRA_SPEED_MULTIPLIER = "speed_multiplier"
         const val SOURCE_MOCK = "mock"
         const val SOURCE_GPS = "gps"
+        /** Geplante Route (Suche + Routing): Fahrt simulieren bzw. mit echtem GPS verfolgen. */
+        const val SOURCE_ROUTE_SIM = "route_sim"
+        const val SOURCE_ROUTE_GPS = "route_gps"
         private const val ARRIVAL_LINGER_MS = 10_000L
 
         /** Muss aus dem Vordergrund (sichtbare Activity) aufgerufen werden – Voraussetzung für location-FGS. */

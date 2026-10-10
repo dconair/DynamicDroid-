@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +49,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -56,6 +58,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dynamicdroid.R
@@ -171,6 +174,10 @@ fun IslandPill(
     val height = lerp(collapsedH, expandedH, p).coerceAtLeast(collapsedH * 0.96f)
     val corner = lerp(collapsedH / 2f, 32f, p.coerceIn(0f, 1f)).coerceAtLeast(0f)
 
+    // Feste dp-Höhen + skalierende sp-Schrift ergeben bei großer Systemschrift (Samsung-Einstellung) Überlappungen.
+    // Die Pille ist ein Overlay mit fester Geometrie und ignoriert deshalb den Schriftgrad.
+    val density = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1f)) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Box(
             Modifier
@@ -205,6 +212,7 @@ fun IslandPill(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -218,7 +226,7 @@ private fun CollapsedRow(content: LiveUpdateContent, cutoutWidthDp: Float, modif
                 colorFilter = ColorFilter.tint(AccentSoft),
             )
         }
-        Spacer(Modifier.width(cutoutWidthDp.dp))
+        Spacer(Modifier.width(cutoutWidthDp.coerceAtLeast(12f).dp))
         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
             SwapText(
                 content.shortCriticalText,

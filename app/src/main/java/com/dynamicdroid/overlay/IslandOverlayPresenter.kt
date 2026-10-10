@@ -17,7 +17,8 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import com.dynamicdroid.liveupdate.LiveUpdateContent
 
 /**
- * Hängt eine Compose-Pille (TYPE_APPLICATION_OVERLAY) um den Kamera-Cutout. Benötigt SYSTEM_ALERT_WINDOW.
+ * Hängt eine Compose-Pille (TYPE_APPLICATION_OVERLAY) unter die Statusleiste oder (optional, [aroundCutout]) um den
+ * Kamera-Cutout. Benötigt SYSTEM_ALERT_WINDOW.
  *
  * Grenzen: Ein Anwendungs-Overlay erscheint nie über dem Sperrbildschirm (Keyguard) und auch nicht über
  * manchen System-UIs; dort übernimmt die Live-Update-Benachrichtigung. Während unsere eigene App im Vordergrund
@@ -27,6 +28,7 @@ class IslandOverlayPresenter(
     private val context: Context,
     private val onOpenApp: () -> Unit,
     private val onStop: () -> Unit,
+    private val aroundCutout: Boolean = false,
 ) : OverlayPresenter {
 
     private val windowManager = context.getSystemService(WindowManager::class.java)
@@ -48,7 +50,7 @@ class IslandOverlayPresenter(
 
     override fun show() {
         if (view != null) return
-        cutout = CutoutGeometry.read(windowManager.currentWindowMetrics, density)
+        cutout = CutoutGeometry.read(windowManager.currentWindowMetrics, density, aroundCutout)
         val composeView = ComposeView(context).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
@@ -134,10 +136,10 @@ internal data class CutoutGeometry(
     companion object {
         private const val FALLBACK_TOP_MARGIN_DP = 6f
 
-        fun read(metrics: WindowMetrics, density: Float): CutoutGeometry {
+        fun read(metrics: WindowMetrics, density: Float, aroundCutout: Boolean): CutoutGeometry {
             val insets = metrics.windowInsets
             val cutout = insets.displayCutout
-            val bounds = cutout?.boundingRects?.firstOrNull { it.top <= 0 && !it.isEmpty }
+            val bounds = if (aroundCutout) cutout?.boundingRects?.firstOrNull { it.top <= 0 && !it.isEmpty } else null
             return if (bounds != null) {
                 CutoutGeometry(
                     widthDp = bounds.width() / density,
@@ -146,7 +148,7 @@ internal data class CutoutGeometry(
                     topPx = 0,
                 )
             } else {
-                // Kein Cutout: Pille mittig unter der Statusleiste.
+                // Standard bzw. kein Cutout: Pille mittig UNTER der Statusleiste, damit sie keine Systemicons überdeckt.
                 val statusBar = insets.getInsets(WindowInsets.Type.statusBars()).top
                 CutoutGeometry(0f, 0f, 0, statusBar + (FALLBACK_TOP_MARGIN_DP * density).toInt())
             }

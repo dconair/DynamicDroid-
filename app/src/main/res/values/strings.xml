@@ -32,6 +32,7 @@
     <string name="live_updates_unsupported">Dieses Gerät hat kein Android 16: Es wird die klassische Navigations-Benachrichtigung verwendet.</string>
     <string name="perm_battery">Akku-Optimierung für die App aus (empfohlen bei Samsung/Xiaomi)</string>
     <string name="flag_island_overlay">Dynamic-Island-Pille (Overlay, experimentell)</string>
+    <string name="flag_island_around_cutout">Pille um die Kamera statt unter der Statusleiste (kann Systemicons überdecken)</string>
     <string name="perm_overlay">Über anderen Apps anzeigen</string>
     <string name="fix">Einrichten</string>
     <string name="speed_label">Simulationsgeschwindigkeit</string>
@@ -39,4 +40,13 @@
     <string name="start_without_notifications">Ohne Benachrichtigungsberechtigung läuft die Navigation, die Live-Update-Anzeige bleibt aber unsichtbar.</string>
     <string name="start_mock">Mock-Route starten (Simulation)</string>
     <string name="start_gps">GPS-Test: Demo-Route ab aktuellem Standort</string>
+    <string name="planner_title">Ziel und Route</string>
+    <string name="planner_destination">Ziel (Adresse oder Ort)</string>
+    <string name="planner_search">Ziel suchen</string>
+    <string name="planner_no_results">Nichts gefunden.</string>
+    <string name="planner_no_location">Aktueller Standort nicht verfügbar. GPS einschalten und draußen erneut versuchen.</string>
+    <string name="planner_start_gps">Navigation starten</string>
+    <string name="planner_simulate">Fahrt simulieren</string>
+    <string name="planner_attribution">Suche: Nominatim, Routing: OSRM-Demo-Server, Daten © OpenStreetMap-Mitwirkende</string>
+    <string name="street_unnamed">die Straße</string>
 </resources>
