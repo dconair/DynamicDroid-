@@ -45,22 +45,41 @@ class LocationRouteTracker(
         val route = routeFactory(LatLng(first.latitude, first.longitude))
         val cumulative = RouteGeometry.cumulativeMeters(route.geometry)
         navigationState.start(route, RouteProgressCalculator.fromTraveled(route, 0.0, clock()))
-        flow.collect { location -> onLocation(route, cumulative, location) }
+        flow.collect { location -> onLocation(route, cumulative, LatLng(location.latitude, location.longitude)) }
     }
 
-    /** Verfolgt eine vorhandene Route. */
-    suspend fun track(route: ActiveRoute) {
-        val cumulative = RouteGeometry.cumulativeMeters(route.geometry)
+    /**
+     * Verfolgt eine vorhandene Route. Mit [reroute] wird nach anhaltender Abweichung (siehe [RerouteDecider]) eine neue
+     * Route ab der aktuellen Position berechnet und übernommen; schlägt das fehl, bleibt die alte Route aktiv.
+     */
+    suspend fun track(initialRoute: ActiveRoute, reroute: (suspend (from: LatLng) -> ActiveRoute)? = null) {
+        var route = initialRoute
+        var cumulative = RouteGeometry.cumulativeMeters(route.geometry)
+        val decider = RerouteDecider()
         navigationState.start(route, RouteProgressCalculator.fromTraveled(route, 0.0, clock()))
-        locations().collect { onLocation(route, cumulative, it) }
+        locations().collect { location ->
+            val here = LatLng(location.latitude, location.longitude)
+            val offRoute = onLocation(route, cumulative, here)
+            if (reroute != null && decider.onFix(offRoute, clock())) {
+                val newRoute = runCatching { reroute(here) }.getOrNull()
+                if (newRoute != null) {
+                    route = newRoute
+                    cumulative = RouteGeometry.cumulativeMeters(route.geometry)
+                    decider.reset()
+                    navigationState.start(route, RouteProgressCalculator.fromTraveled(route, 0.0, clock()))
+                }
+            }
+        }
     }
 
-    private fun onLocation(route: ActiveRoute, cumulative: DoubleArray, location: Location) {
-        val snap = RouteGeometry.snap(route.geometry, cumulative, LatLng(location.latitude, location.longitude))
+    /** Schreibt den Fortschritt in den State und liefert zurück, ob die Position abseits der Route liegt. */
+    private fun onLocation(route: ActiveRoute, cumulative: DoubleArray, here: LatLng): Boolean {
+        val snap = RouteGeometry.snap(route.geometry, cumulative, here)
         val offRoute = snap.distanceFromRouteMeters > OFF_ROUTE_THRESHOLD_M
         navigationState.updateProgress(
             RouteProgressCalculator.fromTraveled(route, snap.traveledMeters, clock(), offRoute),
         )
+        return offRoute
     }
 
     companion object {
