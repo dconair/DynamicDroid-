@@ -97,11 +97,22 @@ Ohne Erlaubnis startet die Navigation trotzdem, nur ohne Pille.
 Die Pille zeigt links das Abbiege-Icon, rechts den Chip-Text und klappt bei jeder neuen Abbiegung 4 s lang per
 Spring-Animation zu einer Karte auf. Kurzer Tap öffnet die App, langer Tap zeigt „App öffnen" / „Navigation beenden".
 
+**Animationsprinzipien (ungetestet auf Hardware, siehe unten):**
+- Ein einziger Spring-Fortschritt (Pille ↔ Karte) steuert Breite, Höhe und Radius; die Karte ist immer in Endgröße
+  gelayoutet und wird nur beschnitten, daher bricht Text nie um und überlappt nichts.
+- Pillen- und Karteninhalt blenden gestaffelt (erst raus, dann rein), Textwechsel ebenso; Ziffern sind tabellarisch,
+  damit sie nicht springen.
+- Ein-/Ausblenden der Pille (z. B. wenn die eigene App sichtbar wird) ist ein Spring aus der Kameramitte, kein hartes
+  Ein-/Ausschalten. Das Overlay-Fenster ist fest dimensioniert und wird nur vor dem Aufklappen vergrößert bzw. nach
+  dem Zuklappen verkleinert.
+- Die System-Benachrichtigung (Chip, Sperrbildschirm) wird von Android gerendert; ihre Animation lässt sich nicht beeinflussen.
+- Ob alles auf echter Hardware „Apple-flüssig" wirkt (Overlay-Fenster laufen auf manchen Geräten mit geringerer
+  Bildrate), muss auf dem Gerät beurteilt werden.
+
 **Grenzen:**
 - Anwendungs-Overlays erscheinen **nie über dem Sperrbildschirm**. Dort zeigt nur die Live-Update-Benachrichtigung etwas.
 - Solange die eigene App im Vordergrund ist, wird die Pille ausgeblendet.
 - Manche Apps/Systemoberflächen (z. B. Vollbild-Videos, einige Sicherheitsdialoge) verdecken Overlays.
-- Das Fenster ist `WRAP_CONTENT`; die Größen-Animation kann auf manchen Geräten leicht ruckeln.
 
 ## Akku, Doze und Hersteller
 
