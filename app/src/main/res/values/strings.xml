@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DynamicDroid</string>
+
+    <string name="channel_navigation_name">Navigation</string>
+    <string name="channel_navigation_description">Laufende Turn-by-Turn-Navigation (Live-Update)</string>
+    <string name="notification_starting">Navigation startet …</string>
+    <string name="action_stop_navigation">Navigation beenden</string>
+    <string name="action_open_app">App öffnen</string>
+
+    <string name="maneuver_depart">Losfahren auf %1$s</string>
+    <string name="maneuver_straight">Geradeaus auf %1$s</string>
+    <string name="maneuver_slight_left">Leicht links auf %1$s</string>
+    <string name="maneuver_left">Links abbiegen auf %1$s</string>
+    <string name="maneuver_sharp_left">Scharf links auf %1$s</string>
+    <string name="maneuver_slight_right">Leicht rechts auf %1$s</string>
+    <string name="maneuver_right">Rechts abbiegen auf %1$s</string>
+    <string name="maneuver_sharp_right">Scharf rechts auf %1$s</string>
+    <string name="maneuver_u_turn">Wenden auf %1$s</string>
+    <string name="maneuver_roundabout">In den Kreisverkehr, weiter auf %1$s</string>
+    <string name="maneuver_arrive">Ziel erreicht</string>
+    <string name="arrived_title">Ziel erreicht</string>
+    <string name="arrived_short">Ziel</string>
+    <string name="off_route_title">Abseits der Route</string>
+    <string name="off_route_short">Route?</string>
+    <string name="summary_format">%1$s · %2$s · Ankunft %3$s</string>
+
+    <string name="home_idle">Keine Route aktiv.</string>
+    <string name="perm_location">Standort (für den Location-Foreground-Service)</string>
+    <string name="perm_notifications">Benachrichtigungen</string>
+    <string name="perm_live_updates">Live-Updates für diese App erlauben</string>
+    <string name="live_updates_unsupported">Dieses Gerät hat kein Android 16: Es wird die klassische Navigations-Benachrichtigung verwendet.</string>
+    <string name="perm_battery">Akku-Optimierung für die App aus (empfohlen bei Samsung/Xiaomi)</string>
+    <string name="flag_island_overlay">Dynamic-Island-Pille (Overlay, experimentell)</string>
+    <string name="perm_overlay">Über anderen Apps anzeigen</string>
+    <string name="fix">Einrichten</string>
+    <string name="speed_label">Simulationsgeschwindigkeit</string>
+    <string name="start_needs_location">Ohne Standortberechtigung kann die Navigation nicht starten: Android verlangt sie für den Location-Foreground-Service, auch in der Simulation.</string>
+    <string name="start_without_notifications">Ohne Benachrichtigungsberechtigung läuft die Navigation, die Live-Update-Anzeige bleibt aber unsichtbar.</string>
+    <string name="start_mock">Mock-Route starten (Simulation)</string>
+    <string name="start_gps">GPS-Test: Demo-Route ab aktuellem Standort</string>
+</resources>
