@@ -32,6 +32,7 @@
     <string name="live_updates_unsupported">This device is not on Android 16: the classic navigation notification is used.</string>
     <string name="perm_battery">Battery optimization off for this app (recommended on Samsung/Xiaomi)</string>
     <string name="flag_island_overlay">Dynamic Island pill (overlay, experimental)</string>
+    <string name="flag_island_around_cutout">Pill around the camera instead of below the status bar (can cover system icons)</string>
     <string name="perm_overlay">Display over other apps</string>
     <string name="fix">Set up</string>
     <string name="speed_label">Simulation speed</string>

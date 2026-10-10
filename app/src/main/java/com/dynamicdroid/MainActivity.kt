@@ -119,6 +119,7 @@ private fun HomeScreen(app: DynamicDroidApp) {
     val status = remember(refresh) { readStatus(context) }
 
     var islandEnabled by remember { mutableStateOf(app.featureFlags.islandOverlayEnabled) }
+    var aroundCutout by remember { mutableStateOf(app.featureFlags.islandAroundCutout) }
     var speed by remember { mutableStateOf(5.0) }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh++ }
@@ -221,15 +222,58 @@ private fun HomeScreen(app: DynamicDroidApp) {
                 })
             }
             AnimatedVisibility(visible = islandEnabled) {
-                PermissionRow(stringResource(R.string.perm_overlay), status.overlay) {
-                    context.startActivity(
-                        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")),
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    PermissionRow(stringResource(R.string.perm_overlay), status.overlay) {
+                        context.startActivity(
+                            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")),
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(stringResource(R.string.flag_island_around_cutout), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Switch(checked = aroundCutout, onCheckedChange = {
+                            aroundCutout = it
+                            app.featureFlags.islandAroundCutout = it
+                        })
+                    }
                 }
             }
         }
+
+        // --- Diagnose: zeigt, ob Android das Live Update tatsächlich als "promoted" einstuft -------------
+        val diagnostics = remember(refresh, navState) { readDiagnostics(context) }
+        SectionCard {
+            Text("Diagnose", style = MaterialTheme.typography.titleSmall)
+            Text(diagnostics, style = MaterialTheme.typography.bodySmall, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+        }
         Spacer(Modifier.height(8.dp))
     }
+}
+
+/**
+ * Rohdaten für die Fehlersuche (z. B. Now Bar / Live Updates): API-Level, Erlaubnis und – bei laufender Navigation –
+ * ob die gepostete Benachrichtigung von Android als promoted eingestuft wurde.
+ */
+private fun readDiagnostics(context: android.content.Context): String {
+    val nm = context.getSystemService(NotificationManager::class.java)
+    val caps = LiveUpdateCapabilities(context)
+    val sb = StringBuilder()
+    sb.appendLine("Gerät: ${Build.MANUFACTURER} ${Build.MODEL}")
+    sb.appendLine("Android ${Build.VERSION.RELEASE}, SDK_INT ${Build.VERSION.SDK_INT}" +
+        if (Build.VERSION.SDK_INT >= 36) ", SDK_INT_FULL ${Build.VERSION.SDK_INT_FULL}" else "")
+    sb.appendLine("ProgressStyle verfügbar: ${caps.supportsProgressStyle}")
+    sb.appendLine("setRequestPromotedOngoing öffentlich: ${caps.hasRequestPromotedOngoingApi}")
+    if (caps.supportsProgressStyle) sb.appendLine("Live Updates erlaubt: ${caps.canPostPromoted()}")
+    val posted = nm.activeNotifications.firstOrNull { it.id == com.dynamicdroid.liveupdate.LiveUpdatePresenter.NOTIFICATION_ID }?.notification
+    if (posted == null) {
+        sb.append("Aktive Benachrichtigung: keine")
+    } else {
+        sb.appendLine("Aktive Benachrichtigung: ja")
+        if (Build.VERSION.SDK_INT >= 36) {
+            sb.appendLine("  promotable: ${posted.hasPromotableCharacteristics()}")
+            sb.append("  als promoted eingestuft: ${(posted.flags and android.app.Notification.FLAG_PROMOTED_ONGOING) != 0}")
+        }
+    }
+    return sb.toString().trimEnd()
 }
 
 @Composable

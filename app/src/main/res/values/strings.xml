@@ -32,6 +32,7 @@
     <string name="live_updates_unsupported">Dieses Gerät hat kein Android 16: Es wird die klassische Navigations-Benachrichtigung verwendet.</string>
     <string name="perm_battery">Akku-Optimierung für die App aus (empfohlen bei Samsung/Xiaomi)</string>
     <string name="flag_island_overlay">Dynamic-Island-Pille (Overlay, experimentell)</string>
+    <string name="flag_island_around_cutout">Pille um die Kamera statt unter der Statusleiste (kann Systemicons überdecken)</string>
     <string name="perm_overlay">Über anderen Apps anzeigen</string>
     <string name="fix">Einrichten</string>
     <string name="speed_label">Simulationsgeschwindigkeit</string>

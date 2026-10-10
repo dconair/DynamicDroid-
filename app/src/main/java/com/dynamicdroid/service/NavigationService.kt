@@ -98,7 +98,10 @@ class NavigationService : Service() {
         first?.let { throttler.markPosted(it, System.currentTimeMillis()) }
 
         if (app.featureFlags.islandOverlayEnabled && Settings.canDrawOverlays(this)) {
-            overlay = IslandOverlayPresenter(this, onOpenApp = ::openApp, onStop = ::stopNavigation).also { it.show() }
+            overlay = IslandOverlayPresenter(
+                this, onOpenApp = ::openApp, onStop = ::stopNavigation,
+                aroundCutout = app.featureFlags.islandAroundCutout,
+            ).also { it.show() }
         }
 
         observeJob = scope.launch { observeState() }
